@@ -44,6 +44,8 @@ def collect_checks(payload: dict[str, Any]) -> dict[str, dict[str, str]]:
         ("redis_metrics", "Redis 采集库", redis.get("metrics")),
         ("redis_db1", "Redis DB1", redis.get("whale_db1")),
         ("redis_db2", "Redis DB2", redis.get("api_db2")),
+        ("redis_db3", "Redis DB3 弹幕人数", redis.get("danmaku_users_db3")),
+        ("redis_db4", "Redis DB4 弹幕排行", redis.get("danmaku_rank_db4")),
         ("http_pool", "采集 HTTP 连接池", collector.get("http_pool")),
         ("api_cache", "API 缓存", payload.get("api_cache")),
     )

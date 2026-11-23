@@ -33,18 +33,25 @@ monitor = Monitor(
 _check_task: asyncio.Task[None] | None = None
 
 
-async def send_alert(bot: Bot, message: str) -> bool:
+async def send_alert(bot: Bot, message: str) -> bool | None:
     try:
-        await asyncio.wait_for(
+        receipt = await asyncio.wait_for(
             bot.call_api(
                 "send_private_msg", user_id=308025580, message=MessageSegment.text(message)
             ),
             timeout=10,
         )
-    except (AdapterException, asyncio.TimeoutError) as exc:
+    except asyncio.TimeoutError:
+        logger.warning("斗虫告警私信等待回执超时，送达状态未知")
+        return None
+    except AdapterException as exc:
         logger.warning(f"斗虫告警私信发送失败（{type(exc).__name__}），下轮重新检查")
         return False
-    return True
+    message_id = receipt.get("message_id") if isinstance(receipt, dict) else None
+    if type(message_id) is int and -(2**31) <= message_id < 2**31:
+        return True
+    logger.warning("斗虫告警私信缺少有效 message_id，送达状态未知")
+    return None
 
 
 async def check_health() -> None:

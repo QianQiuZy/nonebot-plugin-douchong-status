@@ -59,7 +59,7 @@ def test_check_sends_only_new_problems(plugin, tmp_path, monkeypatch):
     monitor = plugin.Monitor(plugin.monitor.targets, state_file)
     monkeypatch.setattr(plugin, "monitor", monitor)
 
-    bot = Mock(spec=Bot, self_id="1000", call_api=AsyncMock())
+    bot = Mock(spec=Bot, self_id="1000", call_api=AsyncMock(return_value={"message_id": -123}))
     monkeypatch.setattr(plugin, "get_bots", lambda: {"1000": bot})
     responses = {}
     seen = []
@@ -167,4 +167,64 @@ def test_missing_bot_and_failed_delivery_do_not_acknowledge(plugin, tmp_path):
         bot = Mock(spec=Bot, call_api=AsyncMock(side_effect=AdapterException("OneBot V11")))
         assert not await plugin.send_alert(bot, "test alert")
 
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(("receipt", "expected"), [
+    ({"message_id": -123}, True), ({"message_id": 0}, True),
+    ({}, None), (None, None), ({"message_id": True}, None),
+    ({"message_id": "42"}, None), ({"message_id": 2**31}, None),
+])
+def test_onebot_receipt(plugin, receipt, expected):
+    bot = Mock(spec=Bot, call_api=AsyncMock(return_value=receipt))
+    assert asyncio.run(plugin.send_alert(bot, "test")) is expected
+
+
+def test_independent_redis_alerts_and_bounded_unknown_receipts(plugin, tmp_path):
+    url = "https://example.test/check"
+    targets = {"VR": url}
+    state = tmp_path / "state.json"
+    redis = {}
+    room = {"collector": {"rooms": {"items": [{"room_id": 123, "status": "offline"}]}}}
+
+    async def run():
+        monitor = plugin.Monitor(targets, state)
+        def serve(request):
+            return degraded(dependencies={"redis": redis}, **room)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(serve)) as client:
+            send = AsyncMock(return_value=True)
+            await monitor.run(client, send)
+            assert "房间 123" in send.await_args.args[0]
+            redis["danmaku_users_db3"] = {"status": "unavailable"}
+            send.return_value = None
+            for attempt in range(3):
+                monitor = plugin.Monitor(targets, state)
+                await monitor.run(client, send)
+                assert send.await_count == 2 + attempt
+                assert "Redis DB3" in send.await_args.args[0]
+                assert "房间" not in send.await_args.args[0]
+                assert monitor.reported[f"VR {url}"] == {"rooms:123"}
+            monitor = plugin.Monitor(targets, state)
+            await monitor.run(client, send)
+            assert send.await_count == 4
+            redis["danmaku_rank_db4"] = {"status": "unavailable"}
+            send.return_value = True
+            await monitor.run(client, send)
+            assert send.await_count == 5
+            message = send.await_args.args[0]
+            assert "Redis DB4" in message and "Redis DB3" not in message
+            redis.clear()  # Older backends omit these roles, so recovery is unknown.
+            await monitor.run(client, send)
+            redis.update(
+                danmaku_rank_db4={"status": "unavailable"}, danmaku_users_db3={"status": "ok"}
+            )
+            await monitor.run(client, send)
+            redis["danmaku_users_db3"]["status"] = "unavailable"
+            await monitor.run(client, send)
+            assert send.await_count == 6
+            message = send.await_args.args[0]
+            assert "Redis DB3" in message and "Redis DB4" not in message
+            await monitor.run(client, send)
+            assert send.await_count == 6
     asyncio.run(run())
