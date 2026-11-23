@@ -67,7 +67,9 @@ def collect_checks(payload: dict[str, Any]) -> dict[str, dict[str, str]]:
             room = fields(item)
             room_id = room.get("room_id")
             status = token(room.get("status"))
-            if type(room_id) is int and room_id > 0 and status and status != "connected":
+            if status in {"", "connected", "daily-reconnecting"}:
+                continue
+            if type(room_id) is int and room_id > 0:
                 rooms[str(room_id)] = f"房间 {room_id} 未连接（{status}）"
 
     failing = fields(payload.get("upstream_api")).get("failing_endpoints")

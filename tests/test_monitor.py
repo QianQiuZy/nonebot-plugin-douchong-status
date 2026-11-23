@@ -88,6 +88,13 @@ def test_check_sends_only_new_problems(plugin, tmp_path, monkeypatch):
         bot.call_api.assert_not_awaited()
 
         vr = "vr.qianqiuzy.cn"
+        planned = {"room_id": 456, "status": "daily-reconnecting"}
+        responses[vr] = httpx.Response(
+            200, json={**HEALTHY, "collector": {"rooms": {"items": [planned]}}}
+        )
+        await plugin.check_health()
+        bot.call_api.assert_not_awaited()
+
         responses[vr] = degraded(dependencies=DATABASE)
         await plugin.check_health()
         args, kwargs = bot.call_api.await_args
@@ -101,13 +108,14 @@ def test_check_sends_only_new_problems(plugin, tmp_path, monkeypatch):
         responses[vr] = degraded(
             dependencies=DATABASE,
             collector={
-                "rooms": {"items": [{"room_id": 123, "status": "authenticating"}]},
+                "rooms": {"items": [planned, {"room_id": 123, "status": "authenticating"}]},
             },
         )
         await plugin.check_health()
         assert bot.call_api.await_count == 2
         message = bot.call_api.await_args.kwargs["message"].data["text"]
         assert "房间 123 未连接" in message
+        assert "456" not in message
         assert "MySQL" not in message
 
         # An unavailable endpoint yields a separate alert and cannot confirm recovery.
