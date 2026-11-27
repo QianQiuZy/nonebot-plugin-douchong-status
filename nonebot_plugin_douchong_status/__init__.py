@@ -63,7 +63,12 @@ async def check_health() -> None:
         ),
         None,
     )
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with httpx.AsyncClient(
+        timeout=10,
+        http2=True,
+        http1=False,
+        headers={"User-Agent": "nonebot-plugin-douchong-status/0.1.0"},
+    ) as client:
         await monitor.run(client, partial(send_alert, bot) if bot is not None else None)
 
 

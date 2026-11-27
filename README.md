@@ -3,6 +3,7 @@
 NoneBot2 插件。启动后每 3 分钟并行请求 VR、PSP、VUP 的 `/health/check`，新故障通过 OneBot v11 私信发送给 QQ `308025580`。
 
 - 三个目标分别是 `https://vr.qianqiuzy.cn`、`https://psp.qianqiuzy.cn` 和 `https://vup.qianqiuzy.cn`，每个请求最多等待 10 秒。
+- 巡检使用 HTTP/2，请求的 `User-Agent` 为 `nonebot-plugin-douchong-status/0.1.0`。自定义健康接口也需支持 HTTP/2。
 - 健康和恢复时保持静默。接口不可达、返回异常或报告服务降级时，私信包含出问题的主机与可用的诊断明细，例如异常依赖、未连接房间和失败的上游接口。
 - 房间状态 `daily-reconnecting` 表示每日计划重连，巡检将其视为正常。同一轮出现的其他房间或依赖故障仍会告警。
 - 同一主机上的持续故障只在首次成功发送时通报。确认恢复后再次出现会重新通报。接口暂时不可达或采样过期时，保留此前已通报的组件故障记录。

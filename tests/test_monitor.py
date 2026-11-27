@@ -65,6 +65,7 @@ def test_check_sends_only_new_problems(plugin, tmp_path, monkeypatch):
     seen = []
 
     def serve(request):
+        assert request.headers["User-Agent"] == "nonebot-plugin-douchong-status/0.1.0"
         seen.append((request.method, request.url.host, request.url.path))
         response = responses.get(request.url.host)
         if response is not None:
@@ -74,11 +75,13 @@ def test_check_sends_only_new_problems(plugin, tmp_path, monkeypatch):
         )
 
     transport = httpx.MockTransport(serve)
-    monkeypatch.setattr(
-        plugin,
-        "httpx",
-        SimpleNamespace(AsyncClient=lambda **kw: httpx.AsyncClient(transport=transport, **kw)),
-    )
+
+    def create_client(**kwargs):
+        assert kwargs["http2"] is True
+        assert kwargs["http1"] is False
+        return httpx.AsyncClient(transport=transport, **kwargs)
+
+    monkeypatch.setattr(plugin, "httpx", SimpleNamespace(AsyncClient=create_client))
 
     async def run():
         await plugin.check_health()
